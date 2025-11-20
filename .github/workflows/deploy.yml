@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+# 觸發條件：
+# 1. 當推送到 main 分支時 (push)
+# 2. 允許手動點擊按鈕觸發 (workflow_dispatch)
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+# 權限設定：允許 GITHUB_TOKEN 讀取程式碼並寫入 Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同時只能有一個部署任務在執行
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  # 第一步：編譯 (Build)
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (下載程式碼)
+        uses: actions/checkout@v4
+
+      - name: Setup Node (設定 Node.js 環境)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies (安裝套件)
+        # 使用 npm install 而非 npm ci，避免因缺少 lock 檔而報錯
+        run: npm install
+
+      - name: Build project (打包專案)
+        run: npm run build
+        env:
+          # [關鍵] 將 GitHub Secrets 中的 API Key 注入環境變數
+          # Vite 會在打包時將其寫入程式碼中
+          VITE_API_KEY: ${{ secrets.VITE_API_KEY }}
+
+      - name: Upload artifact (上傳打包結果)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./dist
+
+  # 第二步：部署 (Deploy)
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages (發布到 Pages)
+        id: deployment
+        uses: actions/deploy-pages@v4
